@@ -1,0 +1,61 @@
+DECLARE @countJSON INT = 0
+DECLARE @lengthTable INT = 0
+
+SELECT @lengthTable = COUNT(JSONString) FROM #tableSource
+WHILE @countJSON < @lengthTable
+	BEGIN
+		DECLARE @tableIOT TABLE(dateTime datetime2,machineNumber nvarchar(1000),errorCode nvarchar(1000), Value nvarchar(100)) 
+		DECLARE @JSON NVARCHAR(3000)
+		DECLARE @dateTime DateTime2
+		DECLARE @keyJSON NVARCHAR(3000)='tag'
+		DECLARE @valueJSON NVARCHAR(3000)='value'
+		DECLARE @Tag NVARCHAR(3000);
+		DECLARE @Value NVARCHAR(3000);
+		DECLARE @tagJSONstring NVARCHAR(3000);
+		DECLARE @errorCode NVARCHAR(3000);
+		DECLARE @machineNumber NVARCHAR(3000);
+		DECLARE @valueJSONstring NVARCHAR(3000)
+		DECLARE @tagStart INT
+		DECLARE @valueStart INT
+		DECLARE @tagValueSplit INT;
+		DECLARE @tableTemp TABLE(stringSplit nvarchar(3000))
+		DECLARE @posChar INT = 1
+		DECLARE @preposChar INT = 1
+		DECLARE @stringTemp nvarchar(3000) = @JSON
+		DECLARE @Count INT = 0
+		DECLARE @Length INT = 0
+		SELECT @JSON = JSONString FROM (SELECT ROW_NUMBER() OVER (ORDER BY (SELECT '1')) AS RowID, * FROM #tableSource) t2 WHERE RowID = @countJSON +1
+
+		SELECT @dateTime = dateTime FROM (SELECT ROW_NUMBER() OVER (ORDER BY (SELECT '1')) AS RowID, * FROM #tableSource) t2 WHERE RowID = @countJSON +1
+		SET @countJSON = @countJSON + 1
+		SET @JSON = REPLACE(@JSON,'},{','}`{')
+		DELETE FROM @tableTemp
+		WHILE @posChar > 0 
+			BEGIN
+				SET @preposChar = @posChar
+				SET @posChar = CHARINDEX('`',@JSON, @posChar+1)
+				IF @posChar > 0
+					INSERT INTO @tableTemp SELECT SUBSTRING(@JSON,@preposChar+1,@posChar-1-@preposChar)
+				ELSE
+					INSERT INTO @tableTemp SELECT SUBSTRING(@JSON, @preposChar+1, LEN(@JSON))
+			END
+		SELECT @length = COUNT(stringSplit) from @tableTemp
+		IF @Length > 0 
+			WHILE @Count < @Length
+			BEGIN
+				SELECT @JSON = stringSplit FROM (SELECT ROW_NUMBER() OVER (ORDER BY (SELECT '1')) AS RowID, * FROM @tableTemp) t2 WHERE RowID = @Count+1
+				SET @JSON = REPLACE(@JSON,'}]','')
+				SET @tagStart = PATINDEX('%' + @keyJSON + '":%',@JSON) + LEN(@keyJSON) + 3;
+				SET @valueStart = PATINDEX('%' + @valueJSON + '":%',@JSON)+LEN(@valueJSON)+2;
+				SET @tagValueSplit = CHARINDEX(',',@JSON);
+				SET @tagJSONstring = REPLACE(SUBSTRING(@JSON, @tagStart, LEN(@JSON)-@tagValueSplit+1),'"','');
+				DECLARE @tagSplit INT = 0;
+				SET @tagSplit = CHARINDEX(':',@tagJSONstring);
+				SET @machineNumber = SUBSTRING(@tagJSONstring,1,@tagSplit-1);
+				SET @errorCode = SUBSTRING(@tagJSONstring,@tagSplit+1,LEN(@tagJSONstring));
+				SET @valueJSONstring= REPLACE(SUBSTRING(@JSON,@valueStart,LEN(@JSON)-1),'}','')
+				INSERT INTO @tableIOT Select @dateTime,@machineNumber,@errorCode,@valueJSONstring
+				SET @Count = @Count + 1
+			END
+	END
+select * from @tableIOT
