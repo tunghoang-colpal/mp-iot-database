@@ -58,4 +58,4 @@ WHILE @countJSON < @lengthTable
 				SET @Count = @Count + 1
 			END
 	END
-select * from @tableIOT
+SELECT * FROM @tableIOT
